@@ -1,10 +1,10 @@
 import {
     TestContainer,
-    StoppedTestContainer
+    StoppedTestContainer, StartedTestContainer
 } from "testcontainers";
 
 
-import { expect, test, beforeEach, describe } from 'vitest'
+import {expect, test, beforeEach, describe, afterEach} from 'vitest'
 import * as net from "node:net";
 import {RedisContainer} from "@testcontainers/redis";
 import PromiseSocket from "promise-socket";
@@ -19,17 +19,18 @@ const customRedisServer = (port: number): net.Server => {
 
 describe('redis tests', () => {
     let port: number;
+    let startedContainer: StartedTestContainer;
 
     beforeEach(async () => {
         // called once before all tests run
         const container: TestContainer = new RedisContainer();
-        const startedContainer = await container.start();
+        startedContainer = await container.start();
         port = startedContainer.getFirstMappedPort()
 
-        // clean up function, called once after all tests run
-        return async () => {
-            const stoppedContainer: StoppedTestContainer = await startedContainer.stop();
-        }
+    })
+
+    afterEach(async () => {
+        const stoppedContainer: StoppedTestContainer = await startedContainer.stop();
     })
 
     test('ping to container', async () => {
