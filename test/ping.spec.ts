@@ -1,12 +1,10 @@
 import {
     TestContainer,
-    StartedTestContainer,
-    StoppedTestContainer,
-    GenericContainer
+    StoppedTestContainer
 } from "testcontainers";
 
 
-import { expect, test } from 'vitest'
+import { expect, test, beforeEach, describe } from 'vitest'
 import * as net from "node:net";
 import {RedisContainer} from "@testcontainers/redis";
 import PromiseSocket from "promise-socket";
@@ -19,63 +17,60 @@ const customRedisServer = (port: number): net.Server => {
     return server;
 }
 
-test('ping to container', async () => {
-    const container: TestContainer = new RedisContainer();
-    const startedContainer: StartedTestContainer = await container.start();
+describe('redis tests', () => {
+    let port: number;
 
-    const port = startedContainer.getFirstMappedPort()
+    beforeEach(async () => {
+        // called once before all tests run
+        const container: TestContainer = new RedisContainer();
+        const startedContainer = await container.start();
+        port = startedContainer.getFirstMappedPort()
 
-    const socket = new net.Socket();
+        // clean up function, called once after all tests run
+        return async () => {
+            const stoppedContainer: StoppedTestContainer = await startedContainer.stop();
+        }
+    })
 
-    socket.setEncoding("ascii")
+    test('ping to container', async () => {
+        const socket = new net.Socket();
+        socket.setEncoding("ascii")
 
-    const promiseSocket = new PromiseSocket(socket)
+        const promiseSocket = new PromiseSocket(socket)
+        await promiseSocket.connect({port: port, host: "localhost"})
 
-    await promiseSocket.connect({port: port, host : "localhost"})
+        await promiseSocket.write("PING\r\n")
+        const response = await promiseSocket.read()
+        expect(response).toBe("+PONG\r\n")
+    }, 1000000)
 
+    test('prout to container', async () => {
+        const socket = new net.Socket();
+        socket.setEncoding("ascii")
+        const promiseSocket = new PromiseSocket(socket)
+        await promiseSocket.connect({port: port, host: "localhost"})
 
-    await promiseSocket.write("PING\r\n")
+        await promiseSocket.write("PROUT\r\n")
+        const response = await promiseSocket.read()
+        expect(response).toBe("-ERR unknown command 'PROUT', with args beginning with: \r\n")
+    }, 1000000)
+});
 
-    const response = await promiseSocket.read()
+describe('redis-add', () => {
+    const port: number = 12345
+    beforeEach(async () => {
+        const server = customRedisServer(port)
+    })
 
-    expect(response).toBe("+PONG\r\n")
-    const stoppedContainer: StoppedTestContainer = await startedContainer.stop();
-}, 1000000)
+    test('ping to custom implementation', async () => {
+        const socket = new net.Socket();
 
-test('prout to container', async () => {
-    const container: TestContainer = new RedisContainer();
-    const startedContainer: StartedTestContainer = await container.start();
+        socket.setEncoding("ascii")
+        const promiseSocket = new PromiseSocket(socket)
+        await promiseSocket.connect({port: port, host: "localhost"})
+        await promiseSocket.write("PING\r\n")
 
-    const port = startedContainer.getFirstMappedPort()
-
-    const socket = new net.Socket();
-
-    socket.setEncoding("ascii")
-
-    const promiseSocket = new PromiseSocket(socket)
-
-    await promiseSocket.connect({port: port, host : "localhost"})
-
-
-    await promiseSocket.write("PROUT\r\n")
-
-    const response = await promiseSocket.read()
-
-    expect(response).toBe("-ERR unknown command 'PROUT', with args beginning with: \r\n")
-    const stoppedContainer: StoppedTestContainer = await startedContainer.stop();
-}, 1000000)
-
-test('ping to custom implementation', async () => {
-    const customServerPort = 12345
-    const server = customRedisServer(customServerPort)
-
-    const socket = new net.Socket();
-    socket.setEncoding("ascii")
-    const promiseSocket = new PromiseSocket(socket)
-    await promiseSocket.connect({port: customServerPort, host : "localhost"})
-    await promiseSocket.write("PING\r\n")
-
-    const response = await promiseSocket.read()
-
-    expect(response).toBe("+PONG\r\n")
-}, 1000000)
+        const response = await promiseSocket.read()
+        expect(response).toBe("+PONG\r\n")
+    }, 1000000)
+})
