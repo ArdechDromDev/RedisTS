@@ -7,8 +7,24 @@ import {RedisContainer} from "@testcontainers/redis";
 import PromiseSocket from "promise-socket";
 
 const customRedisServer = (port: number): net.Server => {
-    const server = net.createServer((socket) => {
-        socket.write("+PONG\r\n")
+    const server = net.createServer((client) => {
+
+        client.setEncoding("ascii")
+        client.on("data", (args) =>{ console.log(args);
+           if(args == "PING\r\n") { client.write("+PONG\r\n")}
+           else{
+               client.write("-ERR unknown command 'PROUT', with args beginning with: \r\n")
+
+           }
+
+           // server <--------------client------------------> test
+
+
+
+
+
+
+    })
     })
     server.listen(port)
     return server;
@@ -59,9 +75,9 @@ const testImplementation = (testFactory: TestFactory) => {
             await promiseSocket.write("PING\r\n")
             const response = await promiseSocket.read()
             expect(response).toBe("+PONG\r\n")
-        }, 1000000)
+        }, 10000)
 
-        test.skip('prout to container', async () => {
+        test('prout to container', async () => {
             const socket = new net.Socket();
             socket.setEncoding("ascii")
             const promiseSocket = new PromiseSocket(socket)
@@ -70,7 +86,7 @@ const testImplementation = (testFactory: TestFactory) => {
             await promiseSocket.write("PROUT\r\n")
             const response = await promiseSocket.read()
             expect(response).toBe("-ERR unknown command 'PROUT', with args beginning with: \r\n")
-        }, 1000000)
+        }, 10000)
     })
 }
 ;
@@ -101,7 +117,7 @@ class AddRedisTestFactory implements TestFactory {
     private server: net.Server;
 
     async beforeEach(): Promise<number> {
-        this.port = 12345;
+        this.port = 12346;
         this.server = customRedisServer(this.port);
         return this.port
     }
