@@ -1,6 +1,4 @@
-import {StartedTestContainer, StoppedTestContainer, TestContainer} from "testcontainers";
-
-
+import {StartedTestContainer, TestContainer} from "testcontainers";
 import {afterEach, beforeEach, describe, expect, test} from 'vitest'
 import * as net from "node:net";
 import {RedisContainer} from "@testcontainers/redis";
@@ -43,7 +41,6 @@ class AddRedisTestFactory implements TestFactory {
     }
 }
 
-
 class RedisTestFactory implements TestFactory {
     private startedContainer: StartedTestContainer | undefined
 
@@ -64,7 +61,6 @@ const testImplementation = (name: String, testFactory: TestFactory) => {
         describe('redis tests ' + name, () => {
             let port: number;
             beforeEach(async () => {
-                // called once before all tests run
                 port = await testFactory.beforeEach()
             })
 
