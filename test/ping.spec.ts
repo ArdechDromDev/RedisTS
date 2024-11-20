@@ -28,6 +28,22 @@ interface TestFactory {
     afterEach(): Promise<void>;
 }
 
+class AddRedisTestFactory implements TestFactory {
+    private port: number;
+    private server: net.Server;
+
+    async beforeEach(): Promise<number> {
+        this.port = 12346;
+        this.server = customRedisServer(this.port);
+        return this.port
+    }
+
+    async afterEach(): Promise<void> {
+        this.server.close()
+    }
+}
+
+
 class RedisTestFactory implements TestFactory {
     private startedContainer: StartedTestContainer | undefined
 
@@ -44,8 +60,8 @@ class RedisTestFactory implements TestFactory {
     }
 }
 
-const testImplementation = (testFactory: TestFactory) => {
-        describe('redis tests', () => {
+const testImplementation = (name: String, testFactory: TestFactory) => {
+        describe('redis tests ' + name, () => {
             let port: number;
             beforeEach(async () => {
                 // called once before all tests run
@@ -82,40 +98,5 @@ const testImplementation = (testFactory: TestFactory) => {
     }
 ;
 
-describe.skip('redis-add', () => {
-    const port: number = 12345
-    beforeEach(async () => {
-        const server = customRedisServer(port)
-    })
-
-    test('ping to custom implementation', async () => {
-        const socket = new net.Socket();
-
-        socket.setEncoding("ascii")
-        const promiseSocket = new PromiseSocket(socket)
-        await promiseSocket.connect({port: port, host: "localhost"})
-        await promiseSocket.write("PING\r\n")
-
-        const response = await promiseSocket.read()
-        expect(response).toBe("+PONG\r\n")
-    }, 1000000)
-})
-
-testImplementation(new RedisTestFactory());
-
-class AddRedisTestFactory implements TestFactory {
-    private port: number;
-    private server: net.Server;
-
-    async beforeEach(): Promise<number> {
-        this.port = 12346;
-        this.server = customRedisServer(this.port);
-        return this.port
-    }
-
-    async afterEach(): Promise<void> {
-        this.server.close()
-    }
-}
-
-testImplementation(new AddRedisTestFactory());
+testImplementation('reference redis impl', new RedisTestFactory());
+testImplementation('ADD redis impl', new AddRedisTestFactory());
