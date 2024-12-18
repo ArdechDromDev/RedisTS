@@ -8,6 +8,7 @@ P: in progress
 [X] Respond to multiple PINGs
 [X] Handle concurrent clients
 [X] Implement the ECHO command
+[X] Implement the ECHO command without quote
 [ ] Implement the SET & GET commands
 [ ] Expiry
 [ ] RDB Persistence

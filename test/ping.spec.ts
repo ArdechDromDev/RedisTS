@@ -14,7 +14,9 @@ const customRedisServer = (port: number): net.Server => {
             if (command == "PING\r\n") {
                 client.write("+PONG\r\n")
             } else if (command.startsWith("ECHO")) {
-                const remaining = command.slice("ECHO \"".length, command.length - 3)
+                const unquotedCommand = command.replace(/\"/g, '')
+                const remaining = unquotedCommand.slice("ECHO ".length, unquotedCommand.length - ("\r\n").length)
+
                 const length = remaining.length
                 client.write("$" + length + "\r\n" + remaining + "\r\n")
             } else {
@@ -126,6 +128,16 @@ const testImplementation = (name: String, testFactory: TestFactory) => {
                 await promiseSocket.connect({port: port, host: "localhost"})
 
                 await promiseSocket.write("ECHO \"tototo\"\r\n")
+                const response = await promiseSocket.read()
+                expect(response).toBe("$6\r\ntototo\r\n")
+            }, 10000)
+            test('echo command without quote', async () => {
+                const socket = new net.Socket();
+                socket.setEncoding("ascii")
+                const promiseSocket = new PromiseSocket(socket)
+                await promiseSocket.connect({port: port, host: "localhost"})
+
+                await promiseSocket.write("ECHO tototo\r\n")
                 const response = await promiseSocket.read()
                 expect(response).toBe("$6\r\ntototo\r\n")
             }, 10000)
