@@ -5,8 +5,8 @@ P: in progress
 
 [X] Bind to a port
 [X] Respond to PING
-[ ] Respond to multiple PINGs
-[ ] Handle concurrent clients
+[X] Respond to multiple PINGs
+[X] Handle concurrent clients
 [ ] Implement the ECHO command
 [ ] Implement the SET & GET commands
 [ ] Expiry

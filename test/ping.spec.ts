@@ -79,7 +79,40 @@ const testImplementation = (name: String, testFactory: TestFactory) => {
                 const response = await promiseSocket.read()
                 expect(response).toBe("+PONG\r\n")
             }, 10000)
+            test('ping twice to container', async () => {
+                const socket = new net.Socket();
+                socket.setEncoding("ascii")
 
+                const promiseSocket = new PromiseSocket(socket)
+                await promiseSocket.connect({port: port, host: "localhost"})
+
+                await promiseSocket.write("PING\r\n")
+                const ignoredPong = await promiseSocket.read()
+                await promiseSocket.write("PING\r\n")
+                const response = await promiseSocket.read()
+                expect(response).toBe("+PONG\r\n")
+            }, 10000)
+            test('ping concurrently to container', async () => {
+                async function openSocket() {
+                    const socket = new net.Socket();
+                    socket.setEncoding("ascii")
+                    const promiseSocket = new PromiseSocket(socket)
+                    await promiseSocket.connect({port: port, host: "localhost"})
+                    return promiseSocket;
+                }
+
+                const promiseSocket1 = await openSocket();
+                const promiseSocket2 = await openSocket();
+
+                const promisePing1 = promiseSocket1.write("PING\r\n")
+                const promisePing2 = promiseSocket2.write("PING\r\n")
+                await Promise.all([promisePing1, promisePing2])
+
+                const response =
+                    await Promise.all([promiseSocket1, promiseSocket2].map(x => x.read()))
+
+                expect(response).toStrictEqual(["+PONG\r\n", "+PONG\r\n"])
+            }, 10000)
             test('prout to container', async () => {
                 const socket = new net.Socket();
                 socket.setEncoding("ascii")
