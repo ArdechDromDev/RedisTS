@@ -4,15 +4,12 @@ import * as net from "node:net";
 import {RedisContainer} from "@testcontainers/redis";
 import PromiseSocket from "promise-socket";
 
-
 const customRedisServer = (port: number): net.Server => {
-    let entry: string | null = null;
+    let entries = new Map<string, string>();
 
     const server = net.createServer((client) => {
         client.setEncoding("ascii")
         client.on("data", (args) => {
-
-
             const sendResponseWithSize = (data: string) => {
                 const unquotedCommand = data.replace(/\"/g, '')
                 client.write("$" + unquotedCommand.length + "\r\n" + unquotedCommand + "\r\n")
@@ -27,11 +24,13 @@ const customRedisServer = (port: number): net.Server => {
             } else if (verb == "ECHO") {
                 sendResponseWithSize(params.join())
             } else if (verb == "GET") {
-                if (entry == null)
+                const entry = entries.get(params[0])
+
+                if (!entry)
                     client.write("$-1\r\n")
                 else sendResponseWithSize(entry)
             } else if (verb == "SET") {
-                entry = params[1].trimEnd()
+                entries.set(params[0], params[1].trimEnd())
                 client.write("+OK\r\n")
             } else {
                 client.write("-ERR unknown command 'PROUT', with args beginning with: \r\n")
@@ -167,6 +166,22 @@ const testImplementation = (name: String, testFactory: TestFactory) => {
                 await promiseSocket.write("GET mykey \r\n")
                 const response = await promiseSocket.read()
                 expect(response).toBe("$6\r\nHello2\r\n")
+            })
+            test('SET then GET with multiple values', async () => {
+                const promiseSocket = await openSocket(port);
+
+                await promiseSocket.write("SET mykey1 \"Hello1\"\r\n")
+                await promiseSocket.read()
+                await promiseSocket.write("SET mykey2 \"Hello2\"\r\n")
+                await promiseSocket.read()
+
+                await promiseSocket.write("GET mykey1\r\n")
+                const response1 = await promiseSocket.read()
+                expect(response1).toBe("$6\r\nHello1\r\n")
+
+                await promiseSocket.write("GET mykey2\r\n")
+                const response2 = await promiseSocket.read()
+                expect(response2).toBe("$6\r\nHello2\r\n")
             })
             test('prout to container', async () => {
                 const promiseSocket = await openSocket(port);

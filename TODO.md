@@ -9,7 +9,7 @@ P: in progress
 [X] Handle concurrent clients
 [X] Implement the ECHO command
 [X] Implement the ECHO command without quote
-[P] Implement the SET & GET commands
+[X] Implement the SET & GET commands
 [ ] Expiry
 [ ] RDB Persistence
 [ ] RDB file config
