@@ -4,23 +4,35 @@ import * as net from "node:net";
 import {RedisContainer} from "@testcontainers/redis";
 import PromiseSocket from "promise-socket";
 
+
 const customRedisServer = (port: number): net.Server => {
+    let entry: string | null = null;
+
     const server = net.createServer((client) => {
         client.setEncoding("ascii")
         client.on("data", (args) => {
-            const command = args.toString();
+
+
+            const sendResponseWithSize = (data: string) => {
+                const unquotedCommand = data.replace(/\"/g, '')
+                client.write("$" + unquotedCommand.length + "\r\n" + unquotedCommand + "\r\n")
+            }
+
+            const command = args.toString().trimEnd();
+            const [verb, ...params] = command.split(' ')
 
             console.log(args);
-            if (command == "PING\r\n") {
+            if (verb == "PING") {
                 client.write("+PONG\r\n")
-            } else if (command.startsWith("ECHO")) {
-                const unquotedCommand = command.replace(/\"/g, '')
-                const remaining = unquotedCommand.slice("ECHO ".length, unquotedCommand.length - ("\r\n").length)
-
-                const length = remaining.length
-                client.write("$" + length + "\r\n" + remaining + "\r\n")
-            } else if (command.startsWith("GET")) {
-                client.write("$-1\r\n")
+            } else if (verb == "ECHO") {
+                sendResponseWithSize(params.join())
+            } else if (verb == "GET") {
+                if (entry == null)
+                    client.write("$-1\r\n")
+                else sendResponseWithSize(entry)
+            } else if (verb == "SET") {
+                entry = params[1].trimEnd()
+                client.write("+OK\r\n")
             } else {
                 client.write("-ERR unknown command 'PROUT', with args beginning with: \r\n")
             }
@@ -67,6 +79,14 @@ class RedisTestFactory implements TestFactory {
     }
 }
 
+async function openSocket(port: number) {
+    const socket = new net.Socket();
+    socket.setEncoding("ascii")
+    const promiseSocket = new PromiseSocket(socket)
+    await promiseSocket.connect({port: port, host: "localhost"})
+    return promiseSocket;
+}
+
 const testImplementation = (name: String, testFactory: TestFactory) => {
         describe('redis tests ' + name, () => {
             let port: number;
@@ -79,40 +99,25 @@ const testImplementation = (name: String, testFactory: TestFactory) => {
             })
 
             test('ping to container', async () => {
-                const socket = new net.Socket();
-                socket.setEncoding("ascii")
-
-                const promiseSocket = new PromiseSocket(socket)
-                await promiseSocket.connect({port: port, host: "localhost"})
+                const promiseSocket = await openSocket(port);
 
                 await promiseSocket.write("PING\r\n")
                 const response = await promiseSocket.read()
                 expect(response).toBe("+PONG\r\n")
-            }, 10000)
+            })
             test('ping twice to container', async () => {
-                const socket = new net.Socket();
-                socket.setEncoding("ascii")
-
-                const promiseSocket = new PromiseSocket(socket)
-                await promiseSocket.connect({port: port, host: "localhost"})
+                const promiseSocket = await openSocket(port);
 
                 await promiseSocket.write("PING\r\n")
                 const ignoredPong = await promiseSocket.read()
                 await promiseSocket.write("PING\r\n")
                 const response = await promiseSocket.read()
                 expect(response).toBe("+PONG\r\n")
-            }, 10000)
+            })
             test('ping concurrently to container', async () => {
-                async function openSocket() {
-                    const socket = new net.Socket();
-                    socket.setEncoding("ascii")
-                    const promiseSocket = new PromiseSocket(socket)
-                    await promiseSocket.connect({port: port, host: "localhost"})
-                    return promiseSocket;
-                }
 
-                const promiseSocket1 = await openSocket();
-                const promiseSocket2 = await openSocket();
+                const promiseSocket1 = await openSocket(port);
+                const promiseSocket2 = await openSocket(port);
 
                 const promisePing1 = promiseSocket1.write("PING\r\n")
                 const promisePing2 = promiseSocket2.write("PING\r\n")
@@ -122,50 +127,56 @@ const testImplementation = (name: String, testFactory: TestFactory) => {
                     await Promise.all([promiseSocket1, promiseSocket2].map(x => x.read()))
 
                 expect(response).toStrictEqual(["+PONG\r\n", "+PONG\r\n"])
-            }, 10000)
+            })
             test('echo command', async () => {
-                const socket = new net.Socket();
-                socket.setEncoding("ascii")
-                const promiseSocket = new PromiseSocket(socket)
-                await promiseSocket.connect({port: port, host: "localhost"})
-
+                const promiseSocket = await openSocket(port);
                 await promiseSocket.write("ECHO \"tototo\"\r\n")
                 const response = await promiseSocket.read()
                 expect(response).toBe("$6\r\ntototo\r\n")
-            }, 10000)
+            })
             test('echo command without quote', async () => {
-                const socket = new net.Socket();
-                socket.setEncoding("ascii")
-                const promiseSocket = new PromiseSocket(socket)
-                await promiseSocket.connect({port: port, host: "localhost"})
-
+                const promiseSocket = await openSocket(port);
                 await promiseSocket.write("ECHO tototo\r\n")
                 const response = await promiseSocket.read()
                 expect(response).toBe("$6\r\ntototo\r\n")
-            }, 10000)
+            })
             test('GET command return nil', async () => {
-                const socket = new net.Socket();
-                socket.setEncoding("ascii")
-                const promiseSocket = new PromiseSocket(socket)
-                await promiseSocket.connect({port: port, host: "localhost"})
-
+                const promiseSocket = await openSocket(port);
                 await promiseSocket.write("GET toto\r\n")
                 const response = await promiseSocket.read()
                 expect(response).toBe("$-1\r\n")
-            }, 10000)
+            })
+            test('SET command return OK', async () => {
+                const promiseSocket = await openSocket(port);
+                await promiseSocket.write("SET mykey \"Hello\"\r\n")
+                const response = await promiseSocket.read()
+                expect(response).toBe("+OK\r\n")
+            })
+            test('SET then GET should return stored key', async () => {
+                const promiseSocket = await openSocket(port);
+                await promiseSocket.write("SET mykey \"Hello\"\r\n")
+                await promiseSocket.read()
+                await promiseSocket.write("GET mykey \r\n")
+                const response = await promiseSocket.read()
+                expect(response).toBe("$5\r\nHello\r\n")
+            })
+            test('SET then GET should return stored key 2', async () => {
+                const promiseSocket = await openSocket(port);
+                await promiseSocket.write("SET mykey \"Hello2\"\r\n")
+                await promiseSocket.read()
+                await promiseSocket.write("GET mykey \r\n")
+                const response = await promiseSocket.read()
+                expect(response).toBe("$6\r\nHello2\r\n")
+            })
             test('prout to container', async () => {
-                const socket = new net.Socket();
-                socket.setEncoding("ascii")
-                const promiseSocket = new PromiseSocket(socket)
-                await promiseSocket.connect({port: port, host: "localhost"})
-
+                const promiseSocket = await openSocket(port);
                 await promiseSocket.write("PROUT\r\n")
                 const response = await promiseSocket.read()
                 expect(response).toBe("-ERR unknown command 'PROUT', with args beginning with: \r\n")
-            }, 10000)
+            })
         })
     }
 ;
 
-testImplementation('reference redis impl', new RedisTestFactory());
 testImplementation('ADD redis impl', new AddRedisTestFactory());
+testImplementation('reference redis impl', new RedisTestFactory());
